@@ -1,0 +1,35 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rendered images (keep sample images, ignore large renders)
+*.exr
+*.hdr
+!images/*.exr
+!results/*.exr
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.lib
+
+# Executables
+lajolla
+*.exe
+
+# Temporary files
+*.tmp
+*.log

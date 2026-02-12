@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<scene version="0.5.0">
+	<integrator type="path">
+		<integer name="maxDepth" value="12"/>
+	</integrator>
+
+	<!-- Transparent Glass Bunny with Disney BSDF -->
+	<shape type="obj">
+		<string name="filename" value="pineapple.obj"/>
+		<transform name="toWorld">
+			<scale value="15"/>
+			<rotate x="1" angle="0"/>
+			<rotate y="1" angle="30"/>
+			<translate x="0" y="0" z="0"/>
+		</transform>
+
+		<bsdf type="disneyglass">
+			<!-- Pure white glass - maximum transparency test -->
+			<rgb name="baseColor" value="1.0 1.0 1.0"/>
+			<float name="roughness" value="0.0"/>
+			<float name="anisotropic" value="0.0"/>
+			<float name="eta" value="1.5"/>
+		</bsdf>
+	</shape>
+
+	<!-- Camera -->
+	<sensor type="perspective">
+		<float name="fov" value="40"/>
+		<transform name="toWorld">
+			<lookAt target="0, 1, 0" origin="5, 3, 8" up="0, 1, 0"/>
+		</transform>
+
+		<sampler type="independent">
+			<integer name="sampleCount" value="512"/>
+		</sampler>
+
+		<film type="hdrfilm">
+			<integer name="width" value="800"/>
+			<integer name="height" value="600"/>
+			<rfilter type="gaussian"/>
+		</film>
+	</sensor>
+
+	<!-- Environment Map for background lighting -->
+	<emitter type="envmap">
+		<string name="filename" value="studio.exr"/>
+		<transform name="toWorld">
+			<rotate y="1" angle="0"/>
+		</transform>
+		<float name="scale" value="2"/>
+	</emitter>
+</scene>

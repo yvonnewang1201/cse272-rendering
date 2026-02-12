@@ -1,0 +1,114 @@
+Q2
+8 Points
+Q2.1 Single monochromatic absorption-only homogeneous volume
+4 Points
+Grading comment:
+Change the absorption parameters to zero in scenes/volpath_test/volpath_test1.xml. What do you see? Why?
+When you change the absorption parameters to zero in the scene file, you will see the emissive sphere rendered with its full original brightness and color, appearing exactly as it would if it were in a vacuum with no participating medium at all. This occurs because this specific renderer models an absorption-only volume where the light reaching the camera is calculated using the Beer-Lambert law, which multiplies the emitted radiance by a transmittance factor of e raised to the power of negative sigma_a times the distance. Mathematically, when the absorption coefficient sigma_a is set to zero, the exponent becomes zero, and since any non-zero number raised to the power of zero equals one, the transmittance becomes perfectly clear. Consequently, the light travels from the object to the camera without undergoing any attenuation or energy loss, effectively making the volume invisible to the viewer.
+
+Q2.2
+4 Points
+Grading comment:
+In the homework, we assume the volume being not emissive. If you were tasked to modify the pseudo code above to add volume emission, how would you do it? Briefly describe your approach.
+
+
+To add volume emission to the pseudo code, I would modify the function to account for the light emitted by the medium itself along the ray path, in addition to the light coming from the background surface. Since the current renderer assumes a homogeneous medium with constant absorption and emission coefficients, I can compute this contribution analytically without needing Monte Carlo sampling. I would calculate the accumulated volumetric emission by integrating the constant emission along the ray distance, which results in a term equal to the volumetric emission intensity multiplied by (1 minus the transmittance) divided by the absorption coefficient. I would then add this calculated volumetric radiance to the existing attenuated surface radiance to return the total light reaching the camera.
+
+Q3 Single monochromatic homogeneous volume with absorption and single-scattering, no surface lighting
+8 Points
+Q3.1
+2 Points
+Grading comment:
+In the derivation above, how did we get from p(t)∝exp⁡(−σtt) to p(t)=σtexp⁡(−σtt)?
+To get from the proportional relationship to the equality, we need to normalize the probability density function (PDF) so that it integrates to 1 over the domain of all possible distances, which ranges from 0 to infinity. By calculating the integral of the term exp(-sigma_t * t) with respect to t from 0 to infinity, we get the result 1/sigma_t. To ensure the total probability equals 1, we must multiply the function by the reciprocal of this result, which is sigma_t. Therefore, sigma_t acts as the normalization constant, giving us the final PDF p(t) = sigma_t * exp(-sigma_t * t).
+Q3.2
+2 Points
+Grading comment:
+How was Equation (13) (see the handout) incorporated into the pseudo code above? Why is it done this way?
+Equation 13 is incorporated into the pseudo code within the else block, which executes when the randomly sampled distance is greater than the distance to the nearest surface. Inside this block, the probability density function variable trans_pdf is explicitly set to the result of Equation 13, which is the exponential of negative sigma_t multiplied by the intersection distance t_hit. This is done this way because Equation 13 calculates the specific probability that a light ray travels the entire distance to the surface without interacting with the medium. In the Monte Carlo integration framework, the contribution of a sample must be divided by the probability of obtaining that sample; therefore, using this probability as the PDF ensures that the light emitted from the surface is correctly weighted in the final image.
+Increasing sigma_a (the absorption coefficient) makes the final image darker. This is because increasing absorption means that as light travels through the volume, more of its energy is absorbed by the medium and lost, preventing it from reaching the camera. The medium essentially acts like dark smoke that blocks light without reflecting it.
+Increasing sigma_s (the scattering coefficient) generally makes the volume appear brighter and creates a glowing halo effect around light sources, while simultaneously making background objects harder to see. This is because increasing scattering raises the probability that light colliding with particles is redirected rather than absorbed. This causes more light to be bounced towards the camera (in-scattering), brightening the fog, but also causes light coming from background objects to be bounced away from the camera path (out-scattering), obscuring visibility. Both parameters increase the overall extinction coefficient, meaning the medium becomes more opaque and visibility depth decreases.
+Q3.4
+2 Points
+Grading comment:
+Change the phase function from isotropic (the default one) to Henyey-Greenstein by uncommenting the phase function specification in the scene scenes/volpath_test/volpath_test2.xml. Play with the parameter g (the valid range is (−1,1)). What does g mean? How does the g parameter change the appearance? Why?
+The parameter g represents the asymmetry parameter of the phase function, which controls the directional distribution of scattered light. Specifically, it is the mean cosine of the scattering angle, determining whether light tends to scatter forward, backward, or equally in all directions.
+When g is positive, it indicates forward scattering, where light primarily continues in its original direction. As you increase g towards 1, the volume will appear significantly brighter when looking towards the light source, creating a strong halo or glow effect around the light, because the light is being directed forward toward the camera. When g is negative, it indicates backward scattering, meaning light tends to bounce back toward the source. As you decrease g towards -1, the volume will appear brighter when the light is behind the camera (illuminating the front of the volume), similar to a reflective surface. When g is 0, scattering is isotropic, meaning light scatters equally in all directions, resulting in a uniform appearance. These changes occur because the g parameter fundamentally alters the probability density function of the scattering angles, concentrating the scattered light energy into specific directions relative to the incoming light.
+Q4 Multiple monochromatic homogeneous volumes with absorption and multiple-scattering using only phase function sampling, no surface lighting
+8 Points
+Question 4.1
+Q4.1
+2.667 Points
+Grading comment:
+Play with the parameters σs,σa of different volumes, and change max_depth, how do they affect the final image? How does increasing/decreasing σs and σa of medium1 and medium2 affect the appearance, respectively? Why? Do different σs and σa values affect how high you should set max_depth?
+
+Increasing $\sigma_a$ (absorption coefficient) generally makes the volume appear darker. This is because a higher absorption coefficient increases the probability that light photons are absorbed and their energy lost as they travel through the medium, preventing them from reaching the camera. If you increase the absorption of the outer medium (medium1), it will darken the entire scene and obscure the inner objects. If you increase it for the inner medium (medium2), that specific object will appear darker and more solid.
+Increasing $\sigma_s$ (scattering coefficient) makes the volume appear more opaque and "cloudy." It increases the probability that light is redirected rather than travelling in a straight line. If the scattering albedo (ratio of scattering to total extinction) is high, increasing $\sigma_s$ will make the medium look brighter and more like a dense white cloud or fog, as light bounces around inside it many times before exiting. However, it also obscures visibility; increasing $\sigma_s$ for the outer medium will make it harder to see the inner medium clearly, blurring its details.
+Yes, different $\sigma_s$ and $\sigma_a$ values affect how high you should set max_depth. If a medium has a high scattering coefficient ($\sigma_s$) and low absorption ($\sigma_a$), light can bounce around inside the volume many times before being absorbed or exiting (this is known as high scattering albedo). To accurately simulate this behavior and capture the full brightness of the volume, you need a high max_depth. If max_depth is set too low for such a medium, the simulation terminates light paths prematurely, resulting in an image that is artificially darker than it should be (energy loss). Conversely, if absorption is high, light paths are naturally short, so a lower max_depth is sufficient.
+Q4.2
+2.667 Points
+Grading comment:
+Switch to the Henyey-Greenstein phase function again. How does changing the g parameter affect the appearance? Why?
+Changing the g parameter controls the directionality of scattering events, which fundamentally alters the volume's appearance from translucent to opaque depending on the lighting angle. When g is positive (forward scattering), light tends to continue along its original path after hitting a particle; this allows light to penetrate deeper into the volume and creates a strong, concentrated glow or halo around light sources when looking towards them, making the medium feel softer and more translucent. When g is negative (backward scattering), light is more likely to bounce back towards the source; this prevents light from penetrating deep into the volume and makes the medium appear brighter and more opaque on the side facing the light, similar to a dense cloud reflecting sunlight. These visual changes occur because g directly manipulates the phase function's probability distribution, concentrating the likelihood of scattering into either forward or backward cones, which dictates how far light can travel into the medium before being fully diffused or absorbed.
+Q4.3
+2.666 Points
+Grading comment:
+Propose a phase function yourself (don't have to describe the exact mathematical form). How would you design the shape of the phase function? What parameter would you set to control it?
+I would propose a dual-lobed phase function designed by linearly blending two separate Henyey-Greenstein functions to capture more complex scattering behaviors found in nature, such as in clouds or dust storms. The shape of this phase function would resemble a peanut or a dumbbell, featuring two distinct scattering lobes: a primary lobe oriented in the forward direction and a secondary lobe oriented in the backward direction, allowing the medium to exhibit both strong forward scattering and distinct retro-reflection simultaneously. To control this shape, I would set three parameters: a forward asymmetry parameter to determine the sharpness and reach of the forward peak, a backward asymmetry parameter to determine the width and intensity of the backward reflection, and a blending weight parameter ranging from zero to one to define the ratio of energy distributed between the forward and backward lobes.
+Q5 Multiple monochromatic homogeneous volumes with absorption and multiple-scattering with both phase function sampling and next event estimation, no surface lighting
+8 Points
+Question 5.1
+Q5.1
+2.667 Points
+Grading comment:
+When will next event estimation be more efficient than phase function sampling? In our test scenes, which one is more efficient? Why?
+Next event estimation is generally more efficient than phase function sampling when the scene contains small, intense light sources or when the medium is optically thin, as it explicitly connects scattering events to light sources rather than relying on random chance to hit them. In our test scenes, next event estimation is significantly more efficient. This is because the test scenes (such as the Cornell Box) typically feature relatively small area lights and isotropic scattering; under these conditions, the probability of a randomly scattered ray blindly hitting the light source via phase function sampling is exceedingly low, leading to high variance and noise, whereas next event estimation guarantees a valid light sample (if unoccluded) and drastically converges the image faster.
+Q5.2
+2.667 Points
+Grading comment:
+In scenes/volpath_test/volpath_test4_2.xml, we render a scene with an object composed of dense volume. How does it compare to rendering the object directly with a Lambertian material? Why are they alike or different?
+Rendering an object composed of a dense volume appears remarkably similar to rendering the same object with a Lambertian material. This resemblance occurs because a dense volume has a very high scattering coefficient, which results in an extremely short mean free path for light entering the medium. As a result, photons penetrate only a shallow distance below the surface before undergoing multiple scattering events and being reflected back out. If the volume's phase function is isotropic, this randomization of photon direction effectively mimics the behavior of a diffuse surface, where light is reflected equally in all directions. However, they differ slightly in that the volumetric representation allows for subsurface scattering—where light enters at one point and exits at a nearby point—creating a softer appearance at geometrical edges compared to the hard, mathematically precise reflection of a pure Lambertian surface.
+
+Q5.3
+2.666 Points
+Grading comment:
+Jim Kajiya famously has predicted in 1991 that "in 10 years, all rendering will be volume rendering". What do you think that makes him think so? Why hasn’t it happened yet?
+
+Jim Kajiya likely made this prediction because volume rendering offers a unified theory of light transport that is physically more general than surface rendering. In the physical world, distinct surfaces are essentially mathematical abstractions; real matter is composed of particles with varying densities, meaning that the surface rendering equation is actually just a special, limiting case of the volume rendering equation where the density becomes infinite at a boundary. Kajiya foresaw that treating everything as a volume would eliminate the need for separate, ad-hoc algorithms for subsurface scattering, hair, fog, and solids, effectively unifying all rendering under one elegant mathematical model. However, this transition has not fully happened yet primarily because of computational cost and sampling efficiency. Treating hard, opaque surfaces as extremely dense volumes creates "stiff" mathematical problems where the mean free path of light is microscopic, requiring an impractical number of samples to resolve sharp edges without noise. Current boundary-representation methods remain significantly faster and more efficient for rendering opaque objects than simulating them as dense clouds of particles.
+Q6 Multiple monochromatic homogeneous volumes with absorption and multiple-scattering with both phase function sampling and next event estimation, with surface lighting
+8 Points
+Question 6.1
+Q6.1
+4 Points
+Grading comment:
+Play with the index of refraction parameter of the dielectric interface in scenes/volpath_test/volpath_test5_2.xml. How does that affect appearance? Why?
+Increasing the index of refraction causes the dielectric interface to appear more reflective and introduces stronger geometric distortion to the volume seen inside. This happens because a higher index of refraction increases the Fresnel reflectance, causing more light to bounce off the surface rather than entering the medium, which makes the object look shinier and prevents some environmental light from illuminating the interior. Additionally, according to Snell's Law, a higher index causes light rays to bend more sharply upon entering and exiting the interface, effectively acting as a stronger lens that magnifies or warps the visual structure of the internal volume and changes the path lengths of light traveling through it.
+Q6.2
+4 Points
+Grading comment:
+In the scene scenes/volpath_test/vol_cbox_teapot.xml, we model the glass teapot as a transparent glass with blue homogeneous medium inside. What is the difference in terms of appearance between this approach and just making the color of the glass blue without any medium inside?
+Modeling the teapot with a blue medium inside creates a realistic appearance of a filled volume where the color saturation and darkness are physically driven by the depth of the liquid, meaning thicker parts of the teapot will look significantly deeper blue than thinner parts due to absorption. This volumetric approach also allows for internal scattering, which can make the liquid appear cloudy, hazy, or glowing depending on lighting, and correctly simulates the refraction of light as it passes from the glass into the dense liquid. In contrast, simply setting the glass surface color to blue makes the object appear as a hollow colored shell, where the blue tint is constant or depends only on the thin glass walls rather than the large volume of space inside. Consequently, the blue glass approach fails to capture the heavy, absorbing nature of liquid and lacks the correct depth-dependent color gradients found in a real pot of tea.
+Q7 Multiple chromatic heterogeneous volumes with absorption and multiple-scattering with both phase function sampling and next event estimation, with surface lighting
+8 Points
+Question 7.1
+Q7.1
+2.667 Points
+Grading comment:
+For heterogeneous volumes, what kind of distribution of the volume density makes the null scattering efficient/inefficient? Can you think of a way to improve our current sampling scheme in the inefficient case?
+
+
+Null scattering becomes highly inefficient when the volume density distribution is sparse or highly variance-heavy, specifically where there are small, localized regions of extremely high density surrounded by large areas of low or zero density. In this scenario, the global majorant (maximum density) must be set to the highest peak to remain valid, which forces the tracking algorithm to take infinitesimally small steps even when traversing empty space, resulting in a massive number of wasted "null" collisions. Conversely, it is most efficient when the density is relatively uniform or consistently close to the global maximum, as the probability of a valid collision remains high. To improve the current sampling scheme in the inefficient case, we could implement a spatially adaptive structure such as a macro-grid, octree, or KD-tree that stores local majorant densities for different sub-regions of the volume. This would allow the sampler to "skip" empty space using large steps based on a low local majorant, while only switching to fine-grained stepping when the ray enters regions where the density is actually high.
+Q7.2
+2.667 Points
+Grading comment:
+How do we make the null-scattering work for emissive volumes? Briefly describe a solution.
+To make null-scattering work for emissive volumes, we need to account for the light emitted by the medium along the ray path, not just the attenuation. A solution is to accumulate emission during the delta tracking loop. As the algorithm probabilistically steps through the volume (generating null or real collisions), we can treat these steps as Monte Carlo samples for the emission integral. At each step, we evaluate the volumetric emission at the current position, weight it by the current path transmittance (throughput), and add it to the accumulated radiance. This effectively integrates the source term along the ray while simultaneously sampling the distance to the next scattering event.
+Q7.3
+2.666 Points
+Grading comment:
+Why is it important to have an unbiased solution for volume rendering? Would it be sensible to have something that is biased but faster? How would you do it?
+An unbiased solution is important because it guarantees that the expected value of the pixel color matches the physically correct result, meaning the image will converge to the "ground truth" without systematic error as you add more samples. Yes, it is absolutely sensible to use a biased but faster solution, especially in real-time applications like video games or production rendering where eliminating noise quickly is more valuable than perfect physical accuracy. I would implement this by using deterministic Ray Marching with fixed step sizes instead of stochastic sampling; this approximates the volume integral using a Riemann sum, which eliminates the noise caused by random sampling but introduces bias in the form of discretization error, potentially blurring fine details or missing small features between steps.
+
+
+
+

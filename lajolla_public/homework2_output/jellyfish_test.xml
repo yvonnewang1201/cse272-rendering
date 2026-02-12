@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<scene version="0.5.0">
+	<integrator type="volpath">
+		<integer name="maxDepth" value="8"/>
+		<integer name="version" value="6"/>
+	</integrator>
+
+	<!-- Ocean medium - increased scattering to demonstrate equiangular sampling importance -->
+	<medium type="homogeneous" id="ocean">
+		<rgb name="sigmaA" value="0.02 0.008 0.002"/>
+		<rgb name="sigmaS" value="0.015 0.012 0.008"/>
+		<float name="scale" value="1"/>
+	</medium>
+
+	<!-- Thin white mist for jellyfish skin - reduced scattering -->
+	<medium type="homogeneous" id="thin_mist">
+		<rgb name="sigmaA" value="0.005 0.005 0.005"/>
+		<rgb name="sigmaS" value="1.5 1.5 1.5"/>
+		<float name="scale" value="0.25"/>
+	</medium>
+
+	<!-- Thicker white mist for jellyfish arm/tentacles -->
+	<medium type="homogeneous" id="thick_mist">
+		<rgb name="sigmaA" value="0.01 0.01 0.01"/>
+		<rgb name="sigmaS" value="2.5 2.5 2.5"/>
+		<float name="scale" value="0.4"/>
+	</medium>
+
+	<!-- Glass material for jellyfish body -->
+	<bsdf type="roughdielectric" id="jellyfish_glass">
+		<float name="intIOR" value="1.33"/>
+		<float name="alpha" value="0.02"/>
+		<rgb name="specularReflectance" value="1 1 1"/>
+		<rgb name="specularTransmittance" value="1 1 1"/>
+	</bsdf>
+
+	<!-- Black emitter material -->
+	<bsdf type="diffuse" id="emitter_black">
+		<rgb name="reflectance" value="0.0 0.0 0.0"/>
+	</bsdf>
+
+	<!-- Jellyfish skin (outer head + small tentacles) - glass with thin mist -->
+	<shape type="obj">
+		<string name="filename" value="jellyfish_skin.obj"/>
+
+		<ref id="jellyfish_glass"/>
+		<ref name="interior" id="thin_mist"/>
+		<ref name="exterior" id="ocean"/>
+	</shape>
+
+	<!-- Jellyfish arm (large central tentacles) - glass with thick mist -->
+	<shape type="obj">
+		<string name="filename" value="jellyfish_arm.obj"/>
+
+		<ref id="jellyfish_glass"/>
+		<ref name="interior" id="thick_mist"/>
+		<ref name="exterior" id="ocean"/>
+	</shape>
+
+	<!-- Jellyfish core - small cyan light source in scattering medium -->
+	<shape type="obj">
+		<string name="filename" value="jellyfish_core.obj"/>
+		<transform name="toWorld">
+			<scale x="0.7" y="0.7" z="0.7"/>
+		</transform>
+
+		<ref id="emitter_black"/>
+
+		<emitter type="area">
+			<rgb name="radiance" value="0.8 3.0 4.0"/>
+		</emitter>
+	</shape>
+
+	<!-- Sunlight from above - reduced for underwater atmosphere -->
+	<shape type="sphere">
+		<point name="center" x="5" y="35" z="-10"/>
+		<float name="radius" value="10"/>
+
+		<emitter type="area">
+			<rgb name="radiance" value="0.6 0.8 1.0"/>
+		</emitter>
+
+		<bsdf type="diffuse">
+			<rgb name="reflectance" value="0.0 0.0 0.0"/>
+		</bsdf>
+
+		<ref name="exterior" id="ocean"/>
+	</shape>
+
+	<!-- Camera setup - moved back to show full jellyfish -->
+	<sensor type="perspective">
+		<string name="fovAxis" value="x"/>
+		<float name="fov" value="45"/>
+		<transform name="toWorld">
+			<lookAt target="0, 0, 0" origin="18, 2, 18" up="0, 1, 0"/>
+		</transform>
+
+		<sampler type="independent">
+			<integer name="sampleCount" value="256"/>
+		</sampler>
+
+		<film type="hdrfilm" id="film">
+			<integer name="width" value="512"/>
+			<integer name="height" value="512"/>
+			<string name="pixelFormat" value="rgb"/>
+			<boolean name="banner" value="false"/>
+
+			<rfilter type="gaussian"/>
+		</film>
+
+		<ref id="ocean"/>
+	</sensor>
+</scene>

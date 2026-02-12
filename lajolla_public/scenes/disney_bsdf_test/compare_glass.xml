@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scene version="0.5.0">
+	<integrator type="path">
+		<integer name="maxDepth" value="8"/>
+	</integrator>
+
+	<!-- Disney Glass sphere on left -->
+	<shape type="sphere">
+		<point name="center" x="-1.5" y="0" z="0"/>
+		<float name="radius" value="0.8"/>
+		<bsdf type="disneyglass">
+			<rgb name="baseColor" value="0.82 0.67 0.16"/>
+			<float name="roughness" value="0.1"/>
+			<float name="anisotropic" value="0.0"/>
+			<float name="eta" value="1.5"/>
+		</bsdf>
+	</shape>
+
+	<!-- RoughDielectric sphere on right for comparison -->
+	<shape type="sphere">
+		<point name="center" x="1.5" y="0" z="0"/>
+		<float name="radius" value="0.8"/>
+		<bsdf type="roughdielectric">
+			<rgb name="specularReflectance" value="1.0 1.0 1.0"/>
+			<rgb name="specularTransmittance" value="0.82 0.67 0.16"/>
+			<float name="roughness" value="0.1"/>
+			<float name="eta" value="1.5"/>
+		</bsdf>
+	</shape>
+
+	<!-- Light behind to see transmission -->
+	<shape type="sphere">
+		<point name="center" x="0" y="0" z="5"/>
+		<float name="radius" value="1.0"/>
+		<emitter type="area">
+			<spectrum name="radiance" value="15000"/>
+		</emitter>
+		<bsdf type="diffuse" id="black">
+			<rgb name="reflectance" value="0.0 0.0 0.0"/>
+		</bsdf>
+	</shape>
+
+	<sensor type="perspective">
+		<string name="fovAxis" value="x"/>
+		<float name="fov" value="50"/>
+		<transform name="toWorld">
+			<lookAt target="0, 0, 0" origin="0, 0, -6" up="0, 1, 0"/>
+		</transform>
+
+		<sampler type="independent">
+			<integer name="sampleCount" value="256"/>
+		</sampler>
+
+		<film type="hdrfilm" id="film">
+			<integer name="width" value="800"/>
+			<integer name="height" value="400"/>
+			<string name="pixelFormat" value="rgb"/>
+			<boolean name="banner" value="false"/>
+			<rfilter type="gaussian"/>
+		</film>
+	</sensor>
+</scene>
