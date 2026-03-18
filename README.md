@@ -10,7 +10,7 @@ This project implements a physically-based renderer that simulates two distinct 
 
 | Dry Seal | Wet Seal |
 |:---:|:---:|
-| ![Dry Seal](results/seal_dry.png) | ![Wet Seal](results/seal_wet.png) |
+| <img src="results/seal_dry.png" width="480"/> | <img src="results/seal_wet.png" width="480"/> |
 
 ### Dry → Wet Transition
 
