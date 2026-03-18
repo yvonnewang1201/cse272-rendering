@@ -72,12 +72,9 @@ lajolla_public/
     └── seal_spot.jpg               # Spot texture (skin UV map)
 
 homework/final_project/
-    ├── final_report.tex            # Full project report (LaTeX)
-    ├── checkpoint_report.tex       # Checkpoint report
     ├── seal_dry.png                # Final dry render
     ├── seal_wet.png                # Final wet render
-    ├── dry_to_wet.apng             # Animated dry→wet transition (APNG)
-    └── make_dry_wet_gif.py         # Script to generate the APNG
+    └── dry_to_wet.apng             # Animated dry→wet transition (APNG)
 ```
 
 ---
