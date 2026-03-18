@@ -7,6 +7,7 @@
 struct register_embree_op {
     uint32_t operator()(const Sphere &sphere) const;
     uint32_t operator()(const TriangleMesh &mesh) const;
+    uint32_t operator()(const CurveStrands &curves) const;
 
     const RTCDevice &device;
     const RTCScene &scene;
@@ -15,6 +16,7 @@ struct register_embree_op {
 struct sample_point_on_shape_op {
     PointAndNormal operator()(const Sphere &sphere) const;
     PointAndNormal operator()(const TriangleMesh &mesh) const;
+    PointAndNormal operator()(const CurveStrands &curves) const;
 
     const Vector3 &ref_point;
     const Vector2 &uv; // for selecting a point on a 2D surface
@@ -24,11 +26,13 @@ struct sample_point_on_shape_op {
 struct surface_area_op {
     Real operator()(const Sphere &sphere) const;
     Real operator()(const TriangleMesh &mesh) const;
+    Real operator()(const CurveStrands &curves) const;
 };
 
 struct pdf_point_on_shape_op {
     Real operator()(const Sphere &sphere) const;
     Real operator()(const TriangleMesh &mesh) const;
+    Real operator()(const CurveStrands &curves) const;
 
     const PointAndNormal &point_on_shape;
     const Vector3 &ref_point;
@@ -37,17 +41,20 @@ struct pdf_point_on_shape_op {
 struct init_sampling_dist_op {
     void operator()(Sphere &sphere) const;
     void operator()(TriangleMesh &mesh) const;
+    void operator()(CurveStrands &curves) const;
 };
 
 struct compute_shading_info_op {
     ShadingInfo operator()(const Sphere &sphere) const;
     ShadingInfo operator()(const TriangleMesh &mesh) const;
+    ShadingInfo operator()(const CurveStrands &curves) const;
 
     const PathVertex &vertex;
 };
 
 #include "shapes/sphere.inl"
 #include "shapes/triangle_mesh.inl"
+#include "shapes/curve_strands.inl"
 
 uint32_t register_embree(const Shape &shape, const RTCDevice &device, const RTCScene &scene) {
     return std::visit(register_embree_op{device, scene}, shape);

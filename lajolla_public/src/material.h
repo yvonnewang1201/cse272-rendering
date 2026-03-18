@@ -97,6 +97,62 @@ struct DisneyBSDF {
     Real eta;
 };
 
+/// Hair BCSDF based on Marschner et al.'s "Light scattering from human hair fibers" (SIGGRAPH 2003)
+/// and d'Eon et al.'s "An energy-conserving hair reflectance model" (Eurographics 2011).
+/// Models light scattering through three lobes:
+/// - R: Direct reflection from hair surface (cuticle reflection)
+/// - TT: Transmission through the hair fiber (backlit appearance)
+/// - TRT: Internal reflection within the hair (colored secondary highlight)
+struct HairBCSDF {
+    // Hair color via absorption coefficient (sigma_a)
+    // For melanin-based coloring: higher sigma_a = darker hair
+    Texture<Spectrum> sigma_a;
+
+    // Roughness parameters
+    Texture<Real> beta_m;  // longitudinal roughness [0, 1], controls highlight width
+    Texture<Real> beta_n;  // azimuthal roughness [0, 1], controls glint sharpness
+
+    // Hair fiber optical properties
+    Real eta;              // index of refraction (typically 1.55 for keratin)
+    Real alpha;            // cuticle tilt angle in degrees (typically 2-3)
+
+    // Lobe scale factors for artistic control
+    Real scale_R;          // R lobe intensity (default 1.0)
+    Real scale_TT;         // TT lobe intensity (default 1.0)
+    Real scale_TRT;        // TRT lobe intensity (default 1.0)
+
+    // Texture interpretation options
+    Real sigma_a_scale;    // Scale factor for absorption (default 1.0)
+    bool use_reflectance;  // If true, texture is reflectance, convert to absorption
+};
+
+/// Oil-coated Hair BCSDF for wet fur/hair rendering
+/// Based on position-free Monte Carlo approach (Guo et al. 2018)
+/// Models a layered system with:
+/// - Top layer: Smooth dielectric oil film (IOR ~1.5)
+/// - Substrate: HairBCSDF with modified Fresnel (oil-hair interface)
+/// Key physics: oil IOR (1.5) ≈ hair keratin IOR (1.55) reduces Fresnel reflection
+/// making the underlying fur "optically invisible" - the wet seal illusion
+struct OilCoatedHairBCSDF {
+    // Hair substrate parameters (same as HairBCSDF)
+    Texture<Spectrum> sigma_a;     // Hair absorption coefficient
+    Texture<Real> beta_m;          // Longitudinal roughness [0, 1]
+    Texture<Real> beta_n;          // Azimuthal roughness [0, 1]
+    Real hair_eta;                 // Hair IOR (typically 1.55 for keratin)
+    Real alpha;                    // Cuticle tilt angle in degrees
+    Real scale_R;                  // R lobe intensity
+    Real scale_TT;                 // TT lobe intensity
+    Real scale_TRT;                // TRT lobe intensity
+    Real sigma_a_scale;            // Scale factor for absorption
+    bool use_reflectance;          // If true, texture is reflectance
+
+    // Oil coating parameters
+    Real oil_eta;                  // Oil film IOR (typically ~1.5)
+    Texture<Real> oil_roughness;   // Oil film roughness (0 = smooth specular)
+    Real oil_specular_scale;       // Scale factor for oil specular (default 1.0, >1 boosts reflections)
+    Real oil_thickness;            // Oil film thickness in nanometers (0 = no interference, 300-600nm for rainbow)
+};
+
 // To add more materials, first create a struct for the material, then overload the () operators for all the
 // functors below.
 using Material = std::variant<Lambertian,
@@ -107,7 +163,9 @@ using Material = std::variant<Lambertian,
                               DisneyGlass,
                               DisneyClearcoat,
                               DisneySheen,
-                              DisneyBSDF>;
+                              DisneyBSDF,
+                              HairBCSDF,
+                              OilCoatedHairBCSDF>;
 
 /// We allow non-reciprocal BRDFs, so it's important
 /// to distinguish which direction we are tracing the rays.

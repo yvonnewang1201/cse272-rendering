@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spotted Seal - DRY FUR (Guard Hair + Underfur) -->
+<scene version="0.5.0">
+    <integrator type="path">
+        <integer name="maxDepth" value="12"/>
+    </integrator>
+
+    <sensor type="perspective">
+        <string name="fovAxis" value="smaller"/>
+        <float name="nearClip" value="0.001"/>
+        <float name="farClip" value="1000"/>
+        <transform name="toWorld">
+            <lookAt origin="0.4, 0.35, 0.8" target="0, 0.12, 0" up="0, 1, 0"/>
+        </transform>
+        <float name="fov" value="55"/>
+
+        <sampler type="ldsampler">
+            <integer name="sampleCount" value="256"/>
+        </sampler>
+
+        <film type="hdrfilm">
+            <integer name="width" value="1280"/>
+            <integer name="height" value="720"/>
+            <rfilter type="gaussian"/>
+        </film>
+    </sensor>
+
+    <!-- v57: NEUTRAL lighting - fix BSDF energy, not lights -->
+    <emitter type="envmap">
+        <string name="filename" value="../disney_bsdf_test/rock.exr"/>
+        <float name="scale" value="1.0"/>
+        <transform name="toWorld">
+            <rotate y="1" angle="180"/>
+        </transform>
+    </emitter>
+
+    <texture type="bitmap" id="seal_spots">
+        <string name="filename" value="seal_spot.jpg"/>
+    </texture>
+
+    <bsdf type="diffuse" id="ground">
+        <rgb name="reflectance" value="0.5 0.5 0.5"/>
+    </bsdf>
+
+    <!-- Eyes: glossy dark material -->
+    <bsdf type="roughplastic" id="eye_bsdf">
+        <rgb name="diffuse_reflectance" value="0.02 0.02 0.02"/>
+        <float name="roughness" value="0.05"/>
+        <float name="eta" value="1.5"/>
+    </bsdf>
+
+    <!-- Dry fur: Silver-gray spotted seal (v59) -->
+    <!-- v59: ENERGY-CONSERVING with diffuse fallback
+
+         Previous versions failed because:
+         - scale > 1.0 violates energy conservation
+         - High TT causes blue HDRI bleed-through
+         - Low sigma_a makes fur transparent
+
+         v59 C++ fix adds a diffuse fallback term that:
+         - Represents multiple-scattered light in dense pelt
+         - Uses reflectance texture directly (spots appear naturally)
+         - Is bounded and energy-conserving
+
+         XML parameters are now physically correct:
+         - All scales <= 1.0 (energy conservation)
+         - TT killed in C++ (no transmission through dense fur)
+         - Moderate sigma_a for some absorption -->
+    <bsdf type="hair" id="dry_fur_bsdf">
+        <ref name="reflectance" id="seal_spots"/>
+        <float name="sigma_a_scale" value="0.30"/>
+        <float name="beta_m" value="0.40"/>
+        <float name="beta_n" value="0.45"/>
+        <float name="eta" value="1.55"/>
+        <float name="alpha" value="2.0"/>
+        <float name="scale_R" value="1.0"/>
+        <float name="scale_TT" value="0.0"/>
+        <float name="scale_TRT" value="1.0"/>
+    </bsdf>
+
+    <!-- Seal body -->
+    <shape type="obj">
+        <string name="filename" value="Seal_Body.obj"/>
+        <ref name="bsdf" id="dry_fur_bsdf"/>
+    </shape>
+
+    <!-- Seal eyes -->
+    <shape type="obj">
+        <string name="filename" value="Seal_Eyes.obj"/>
+        <ref name="bsdf" id="eye_bsdf"/>
+    </shape>
+
+    <!-- Dry fur curves (Guard Hair + Underfur) <float name="radius" value="0.00009"/>-->
+    <shape type="curves">
+        <string name="filename" value="fur_base.txt"/>
+        
+        <string name="curve_type" value="linear"/>
+        <ref name="bsdf" id="dry_fur_bsdf"/>
+    </shape>
+
+    <shape type="obj">
+        <string name="filename" value="ground_plane.obj"/>
+        <transform name="toWorld">
+            <translate y="-0.05"/>
+            <scale value="10"/>
+        </transform>
+        <ref name="bsdf" id="ground"/>
+    </shape>
+</scene>

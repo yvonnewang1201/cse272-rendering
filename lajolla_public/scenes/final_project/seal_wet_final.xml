@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spotted Seal - WET FUR (v25) -->
+<!-- v25: Full wet fur system
+     - Geometric flattening: wetness compresses height along skin normal (v24)
+     - Normal blending: wetness blends cylinder normal -> skin normal (v25)
+     - Shadow-invisible: curves don't shadow each other (v21)
+     - Macro-frame BSDF: GGX specular on baked skin normal (v20) -->
+<scene version="0.5.0">
+    <integrator type="path">
+        <integer name="maxDepth" value="12"/>
+    </integrator>
+
+    <sensor type="perspective">
+        <string name="fovAxis" value="smaller"/>
+        <float name="nearClip" value="0.001"/>
+        <float name="farClip" value="1000"/>
+        <transform name="toWorld">
+            <lookAt origin="0.4, 0.35, 0.8" target="0, 0.12, 0" up="0, 1, 0"/>
+        </transform>
+        <float name="fov" value="55"/>
+
+        <sampler type="ldsampler">
+            <integer name="sampleCount" value="256"/>
+        </sampler>
+
+        <film type="hdrfilm">
+            <integer name="width" value="1280"/>
+            <integer name="height" value="720"/>
+            <rfilter type="gaussian"/>
+        </film>
+    </sensor>
+
+    <!-- Rock environment - rotated 180° for front lighting on wet seal -->
+    <!-- v40: Rotate envmap so sun illuminates the camera-facing side -->
+    <emitter type="envmap">
+        <string name="filename" value="../disney_bsdf_test/rock.exr"/>
+        <float name="scale" value="1.0"/>
+        <transform name="toWorld">
+            <rotate y="1" angle="180"/>
+        </transform>
+    </emitter>
+
+    <texture type="bitmap" id="seal_spots">
+        <string name="filename" value="seal_spot.jpg"/>
+    </texture>
+
+    <bsdf type="diffuse" id="ground">
+        <rgb name="reflectance" value="0.5 0.5 0.5"/>
+    </bsdf>
+
+    <!-- Eyes: glossy dark material -->
+    <bsdf type="roughplastic" id="eye_bsdf">
+        <rgb name="diffuse_reflectance" value="0.02 0.02 0.02"/>
+        <float name="roughness" value="0.05"/>
+        <float name="eta" value="1.5"/>
+    </bsdf>
+
+    <!-- WET FUR BSDF: Natural wet seal with glossy oil film (v47) -->
+    <!-- v47: Balanced wet appearance with visible gray base
+         sigma_a_scale=1.5: Darker than dry (0.35) but not too black
+         beta_m/n=0.05: Very tight scattering for sharp wet appearance
+         oil_roughness=0.003: Mirror-sharp specular for wet sheen
+         oil_specular_scale=15.0: Strong but not overwhelming specular
+         oil_eta=1.52: Realistic oil IOR for blue-green tint from sky reflection
+         wet_darkening in BSDF (0.40) + oil absorption creates natural wet gray
+         Spots: Sharp and very dark due to tight scattering + high absorption -->
+    <bsdf type="oilcoatedhair" id="wet_fur_bsdf">
+        <ref name="reflectance" id="seal_spots"/>
+        <float name="sigma_a_scale" value="1.5"/>
+        <float name="beta_m" value="0.05"/>
+        <float name="beta_n" value="0.05"/>
+        <float name="hair_eta" value="1.55"/>
+        <float name="oil_eta" value="1.52"/>
+        <float name="oil_roughness" value="0.003"/>
+        <float name="oil_specular_scale" value="15.0"/>
+        <float name="oil_thickness" value="200"/>
+        <float name="alpha" value="1.5"/>
+        <float name="scale_R" value="0.8"/>
+        <float name="scale_TT" value="1.5"/>
+        <float name="scale_TRT" value="0.2"/>
+    </bsdf>
+
+    <!-- Seal body with wet appearance -->
+    <shape type="obj">
+        <string name="filename" value="Seal_Body.obj"/>
+        <ref name="bsdf" id="wet_fur_bsdf"/>
+    </shape>
+
+    <!-- Seal eyes -->
+    <shape type="obj">
+        <string name="filename" value="Seal_Eyes.obj"/>
+        <ref name="bsdf" id="eye_bsdf"/>
+    </shape>
+
+    <!-- WET FUR GEOMETRY (v25: Flattening + Normal Blending) -->
+    <!-- wetness=0.95:
+         1) Geometric: Compress height to 5% along baked skin normal
+         2) Shading: Blend cylinder normal 95% toward skin normal (slick film)
+         radius_scale=3.5: Thicker strands for wet clump appearance
+         shadow_invisible=true: Curves don't shadow each other -->
+    <shape type="curves">
+        <string name="filename" value="fur_base.txt"/>
+        <string name="curve_type" value="linear"/>
+        <float name="wetness" value="0.95"/>
+        <float name="radius_scale" value="3.5"/>
+        <boolean name="shadow_invisible" value="true"/>
+        <ref name="bsdf" id="wet_fur_bsdf"/>
+    </shape>
+
+    <shape type="obj">
+        <string name="filename" value="ground_plane.obj"/>
+        <transform name="toWorld">
+            <translate y="-0.05"/>
+            <scale value="10"/>
+        </transform>
+        <ref name="bsdf" id="ground"/>
+    </shape>
+</scene>

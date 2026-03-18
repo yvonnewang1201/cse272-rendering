@@ -1,0 +1,81 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{subcaption}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!50!black},
+    stringstyle=\color{red!50!black},
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10}
+}
+
+\title{CSE 272 - Checkpoint Report\\
+\large Realistic Spotted Seal Fur Rendering}
+\author{Yvonne Wang}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Project Overview}
+
+This project aims to render realistic spotted seal fur with two distinct appearances:
+\begin{itemize}
+    \item \textbf{Dry Seal:} Fluffy, matte fur with visible silver-gray base and dark spots.
+    \item \textbf{Wet Seal:} Sleek, glossy appearance where the oil film creates an optical illusion of ``hairless'' skin.
+\end{itemize}
+The primary rendering challenge arises from the index-of-refraction (IOR) matching between the oil film ($\eta \approx 1.50$) and hair keratin ($\eta \approx 1.55$), which drastically reduces Fresnel reflections and makes individual hair strands optically merge.
+
+\section{Implementation Progress}
+
+\subsection{Part 1: Hair BCSDF Implementation (Dry Seal)}
+To simulate the dry fur, I implemented the Marschner Hair BCSDF model, evaluating the R (Reflection), TT (Transmission), and TRT (Internal Reflection) lobes using Gaussian longitudinal scattering and trimmed logistic azimuthal scattering. 
+
+To achieve a natural ``fluffy'' appearance, I introduced a tangent jittering technique. By applying a UV-hashed spatial micro-perturbation (0.15 radians) to the orthonormal frame during evaluation and sampling, the micro-fiber scattering produces a softer, more realistic dry fur volume.
+
+\subsection{Part 2: Oil-Coated Hair BCSDF (Wet Seal)}
+Developing the wet fur required overcoming the physical reality that a single layer of matching IOR ($\eta_{\text{eff}} \approx 1.033$) produces a physical Fresnel reflection of only $\sim$0.07\%, making the fur look completely matte and dry.
+
+Through multiple iterations (testing thin-film interference, Disney clearcoat, and pure GGX), I finalized a \textbf{Dual-Lobe Specular} model to capture both direct highlights and environment lighting:
+\begin{itemize}
+    \item \textbf{Sharp Lobe:} $\alpha = 0.005$ for point-light highlights.
+    \item \textbf{Wide Lobe:} $\alpha = 0.15$ to catch broad environment reflections.
+\end{itemize}
+\textbf{Critical Fix:} The dual-lobe approach initially introduced severe fireflies due to a PDF mismatch. I resolved this by forcing the importance sampling to draw exclusively from the wide lobe (the dominant energy contributor), which perfectly stabilized the render.
+
+\subsection{Part 3: Firefly Elimination \& Stability}
+The combination of microscopic Embree curve geometry ($r \sim 0.0001$) and high-intensity HDRI sources led to numerical instability. I implemented a robust multi-level clamping strategy in the path tracer, including clamping the BSDF/PDF ratio (\texttt{MAX\_MC\_WEIGHT = 5}) and capping indirect radiance, which successfully eliminated all fireflies without darkening the image.
+
+\section{Current Results}
+
+% ==========================================
+% 圖片預留區 (請將檔案名稱替換成你算出來的圖)
+% ==========================================
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=1\textwidth]{Seals.png}
+    \caption{Dry Seal and Wet Seal}
+\end{figure}
+
+\section{Future Work}
+
+With the core BSDFs mathematically stable, the next phase will focus on geometry, UV integration, and physical fur alterations:
+\begin{enumerate}
+    \item \textbf{Real Fur Geometry:} Implement a custom Blender Python script to export realistic, high-density hair curves with proper UV mapping from the skin mesh.
+    \item \textbf{Geometric Alterations for Wet Fur:} Modify the curve primitives to simulate wetness physically (e.g., geometric flattening along the skin normal, radius scaling for clumping).
+    \item \textbf{Final Scene Integration:} Produce a high-quality side-by-side comparison showcasing the optical transition from dry to wet fur on a complete 3D seal model.
+\end{enumerate}
+
+\end{document}

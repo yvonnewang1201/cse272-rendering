@@ -68,6 +68,33 @@ Image3 aux_render(const Scene &scene) {
     return img;
 }
 
+// =============================================================================
+// v39 NUCLEAR SAMPLE CLAMP - Applied at accumulation level
+// =============================================================================
+// This is the ONLY place that cannot be bypassed. No matter what happens
+// inside path_tracing() (early returns, NaN propagation, etc.), this clamp
+// catches EVERY sample before it enters the image buffer.
+//
+// This is how production renderers (Arnold, Cycles) guarantee no fireflies.
+// =============================================================================
+// v40: Loosened from 20.0 to 100.0 to preserve legitimate specular highlights
+// The oil film on wet fur creates high-energy glints that are NOT fireflies
+// 100.0 allows glossy sheen while still killing NaN/Inf singularities
+static const Real MAX_SAMPLE_VALUE_NUCLEAR = Real(100.0);
+
+inline Spectrum clamp_sample_nuclear(const Spectrum &sample) {
+    Spectrum result = sample;
+    for (int i = 0; i < 3; ++i) {
+        // Kill NaN/Inf
+        if (std::isnan(result[i]) || std::isinf(result[i])) {
+            result[i] = Real(0);
+        }
+        // Hard clamp to 20.0
+        result[i] = std::clamp(result[i], Real(0), MAX_SAMPLE_VALUE_NUCLEAR);
+    }
+    return result;
+}
+
 Image3 path_render(const Scene &scene) {
     int w = scene.camera.width, h = scene.camera.height;
     Image3 img(w, h);
@@ -89,7 +116,9 @@ Image3 path_render(const Scene &scene) {
                 Spectrum radiance = make_zero_spectrum();
                 int spp = scene.options.samples_per_pixel;
                 for (int s = 0; s < spp; s++) {
-                    radiance += path_tracing(scene, x, y, rng);
+                    // v39 NUCLEAR: Clamp at accumulation - CANNOT be bypassed
+                    Spectrum sample = path_tracing(scene, x, y, rng);
+                    radiance += clamp_sample_nuclear(sample);
                 }
                 img(x, y) = radiance / Real(spp);
             }

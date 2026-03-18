@@ -17,6 +17,14 @@ struct ShadingInfo {
     Real mean_curvature; // 0.5 * (dN/du + dN/dv)
     // Stores min(length(dp/du), length(dp/dv)), for ray differentials.
     Real inv_uv_size;
+    // Baked skin/macro-surface normal for curves (from export script)
+    // Used by OilCoatedHairBCSDF for smooth clearcoat specular
+    Vector3 skin_normal = Vector3{0, 1, 0};  // Default to up
+    bool has_skin_normal = false;  // True if skin_normal was baked
+    // v32: Surface UV for curves - the ROOT UV from mesh texture map
+    // This is NEVER overwritten by curve parameterization
+    Vector2 surface_uv = Vector2{0.5, 0.5};
+    bool has_surface_uv = false;
 };
 
 /// A Shape is a geometric entity that describes a surface. E.g., a sphere, a triangle mesh, a NURBS, etc.
@@ -48,9 +56,56 @@ struct TriangleMesh : public ShapeBase {
     TableDist1D triangle_sampler;
 };
 
+/// Curve strands for fur/hair rendering using Embree's native curve primitives.
+/// Each curve is a sequence of control points with radii.
+/// Embree provides proper tangent direction along the curve for hair BCSDF.
+enum class CurveType {
+    Linear,         // Linear segments (RTC_GEOMETRY_TYPE_ROUND_LINEAR_CURVE)
+    Bezier,         // Cubic Bezier curves (RTC_GEOMETRY_TYPE_ROUND_BEZIER_CURVE)
+    BSpline,        // B-Spline curves (RTC_GEOMETRY_TYPE_ROUND_BSPLINE_CURVE)
+    CatmullRom     // Catmull-Rom splines (RTC_GEOMETRY_TYPE_ROUND_CATMULL_ROM_CURVE)
+};
+
+struct CurveStrands : public ShapeBase {
+    /// Control points with radius stored as (x, y, z, radius)
+    std::vector<Vector4> control_points;
+    /// Indices into control_points for each curve segment
+    /// For linear curves: each index is a segment start (2 points)
+    /// For cubic curves: each index is a segment start (4 points)
+    std::vector<int> indices;
+    /// UV coordinates at the root of each strand (for texture lookup)
+    /// One UV per strand, indexed by strand_id
+    std::vector<Vector2> root_uvs;
+    /// Baked skin/macro-surface normals at the root of each strand
+    /// Used for wet fur clearcoat specular (OilCoatedHairBCSDF)
+    /// One normal per strand, indexed by strand_id
+    std::vector<Vector3> skin_normals;
+    /// Surface normals per control point (same size as control_points)
+    /// Each control point stores the skin normal for normal blending
+    /// This enables direct lookup by vertex index during intersection
+    std::vector<Vector3> surface_normals;
+    /// Maps segment index to strand index (for UV lookup and skin normal)
+    std::vector<int> segment_to_strand;
+    /// Number of points per curve segment
+    int points_per_segment = 2;  // 2 for linear, 4 for cubic
+    /// Type of curve interpolation
+    CurveType curve_type = CurveType::Linear;
+    /// Total surface area (approximate, for sampling)
+    Real total_area = 0;
+    /// For sampling curves based on their area
+    TableDist1D curve_sampler;
+    /// If true, these curves don't cast shadows on other shadow-invisible curves.
+    /// Used for wet fur to avoid micro-self-shadowing between dense strands.
+    bool shadow_invisible = false;
+    /// Wetness factor for normal blending (0=dry cylinder, 1=skin normal)
+    /// Used to create "slick oil film" appearance by blending shading normal
+    /// from hair cylinder toward baked skin normal.
+    Real wetness = Real(0);
+};
+
 // To add more shapes, first create a struct for the shape, add it to the variant below,
 // then implement all the relevant functions below.
-using Shape = std::variant<Sphere, TriangleMesh>;
+using Shape = std::variant<Sphere, TriangleMesh, CurveStrands>;
 
 /// Add the shape to an Embree scene.
 uint32_t register_embree(const Shape &shape, const RTCDevice &device, const RTCScene &scene);
@@ -102,4 +157,17 @@ inline int get_exterior_medium_id(const Shape &shape) {
 }
 inline bool is_light(const Shape &shape) {
     return get_area_light_id(shape) >= 0;
+}
+
+/// Check if a shape is a CurveStrands
+inline bool is_curve(const Shape &shape) {
+    return std::holds_alternative<CurveStrands>(shape);
+}
+
+/// Check if a shape is a CurveStrands with shadow_invisible=true
+inline bool is_shadow_invisible_curve(const Shape &shape) {
+    if (const CurveStrands *curves = std::get_if<CurveStrands>(&shape)) {
+        return curves->shadow_invisible;
+    }
+    return false;
 }

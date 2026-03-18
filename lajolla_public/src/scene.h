@@ -103,3 +103,72 @@ inline Real get_shadow_epsilon(const Scene &scene) {
 inline Real get_intersection_epsilon(const Scene &scene) {
     return min(scene.bounds.radius * Real(1e-5), Real(0.01));
 }
+
+// =============================================================================
+// v37 CURVE RAY EPSILON FIX
+// =============================================================================
+// Problem: Curve radii are ~0.0001 or smaller. Standard epsilon (~1e-5) causes
+// immediate self-intersection with micro-cylinders at grazing angles.
+//
+// Solution: When spawning rays from curve hits, use a MUCH larger epsilon
+// proportional to the curve radius. This escapes the "self-intersection trap"
+// where rays continuously re-hit the same or adjacent strands.
+// =============================================================================
+
+/// Check if a shape is a curve/hair primitive
+inline bool is_curve_shape(const Shape &shape) {
+    return std::holds_alternative<CurveStrands>(shape);
+}
+
+/// Get the average radius of a curve at a given primitive (segment) ID
+inline Real get_curve_radius_at_hit(const Shape &shape, int primitive_id) {
+    if (!std::holds_alternative<CurveStrands>(shape)) {
+        return Real(0);
+    }
+    const CurveStrands &curves = std::get<CurveStrands>(shape);
+    if (primitive_id < 0 || primitive_id >= (int)curves.indices.size()) {
+        return Real(0.0001);  // Fallback to typical fur radius
+    }
+    int start_idx = curves.indices[primitive_id];
+    if (start_idx < 0 || start_idx + 1 >= (int)curves.control_points.size()) {
+        return Real(0.0001);
+    }
+    // Average of start and end radius for this segment
+    Real r0 = curves.control_points[start_idx][3];
+    Real r1 = curves.control_points[start_idx + 1][3];
+    return (r0 + r1) / Real(2);
+}
+
+/// Get dynamic intersection epsilon based on hit geometry
+/// For curves: 20x the curve radius to escape micro-cylinder self-intersection
+/// For other geometry: standard scene epsilon
+inline Real get_intersection_epsilon_for_vertex(const Scene &scene, const PathVertex &vertex) {
+    if (vertex.shape_id < 0 || vertex.shape_id >= (int)scene.shapes.size()) {
+        return get_intersection_epsilon(scene);
+    }
+    const Shape &shape = scene.shapes[vertex.shape_id];
+    if (is_curve_shape(shape)) {
+        // v37: Dynamic epsilon based on curve radius
+        // Use 20x the curve radius to robustly escape self-intersection
+        Real curve_radius = get_curve_radius_at_hit(shape, vertex.primitive_id);
+        Real curve_epsilon = curve_radius * Real(20);
+        // Also ensure minimum epsilon based on scene scale
+        return max(curve_epsilon, get_intersection_epsilon(scene));
+    }
+    return get_intersection_epsilon(scene);
+}
+
+/// Get dynamic shadow epsilon based on hit geometry
+/// For curves: use same scaling as intersection epsilon
+inline Real get_shadow_epsilon_for_vertex(const Scene &scene, const PathVertex &vertex) {
+    if (vertex.shape_id < 0 || vertex.shape_id >= (int)scene.shapes.size()) {
+        return get_shadow_epsilon(scene);
+    }
+    const Shape &shape = scene.shapes[vertex.shape_id];
+    if (is_curve_shape(shape)) {
+        Real curve_radius = get_curve_radius_at_hit(shape, vertex.primitive_id);
+        Real curve_epsilon = curve_radius * Real(20);
+        return max(curve_epsilon, get_shadow_epsilon(scene));
+    }
+    return get_shadow_epsilon(scene);
+}

@@ -276,7 +276,8 @@ Spectrum vol_path_tracing_2(const Scene &scene,
         Ray shadow_ray{p, dir_light, get_shadow_epsilon(scene),
                        (1 - get_shadow_epsilon(scene)) * dist_to_light};
 
-        if (!occluded(scene, shadow_ray)) {
+        // No origin shape for medium scattering, pass -1
+        if (!occluded(scene, shadow_ray, -1)) {
             // Compute geometry term: |ω' · n_p'| / ||p - p'||²
             Real G = max(-dot(dir_light, point_on_light.normal), Real(0)) /
                      (dist_to_light * dist_to_light);

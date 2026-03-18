@@ -1,78 +1,151 @@
-# Advanced Rendering - CSE 272 Final Project
+# Realistic Spotted Seal Fur Rendering (Dry and Wet)
 
-A physically-based renderer built on the lajolla framework, featuring advanced rendering techniques including volumetric path tracing, Disney BSDF materials, and importance sampling strategies.
+**CSE 272 – Advanced Rendering** | UC San Diego | Yvonne Wang
 
-## Features
+---
 
-### Implemented Techniques
+## Project Overview
 
-**Volumetric Path Tracing**
-- Homogeneous and heterogeneous participating media
-- Multiple scattering with next event estimation (NEE)
-- Delta tracking for heterogeneous volumes
-- Henyey-Greenstein phase function
+This project implements a physically-based renderer that simulates two distinct appearances of a spotted harbor seal's fur coat — **dry** and **wet** — by extending the [lajolla](https://github.com/BachiLi/lajolla_public) path tracer with custom hair/fur BSDFs and curve geometry.
 
-**Disney BSDF**
-- Full Disney Principled BSDF implementation
-- Anisotropic metal and glass materials
-- Clearcoat layer with correct sampling
-- Subsurface scattering approximation
+| Dry Seal | Wet Seal |
+|:---:|:---:|
+| ![Dry Seal](homework/final_project/seal_dry.png) | ![Wet Seal](homework/final_project/seal_wet.png) |
 
-**Importance Sampling**
-- Equiangular sampling for point lights in participating media
-- Multiple Importance Sampling (MIS) with balance heuristic
-- Visible normal sampling (Heitz 2018) for anisotropic GGX
+### Dry → Wet Transition
 
-## Sample Renders
+![Dry to Wet Animation](homework/final_project/dry_to_wet.apng)
 
-<!-- Add your rendered images here -->
-| Scene | Description |
-|-------|-------------|
-| Coming soon | Volumetric Cornell Box |
-| Coming soon | Heterogeneous Volume |
-| Coming soon | Disney Materials |
+---
 
-## Build Instructions
+## Key Techniques
 
+### 1. Marschner Hair BCSDF (Dry Fur)
+Implemented the full Marschner hair scattering model with three lobes:
+- **R** (surface reflection) — produces the bright highlight at the cuticle
+- **TT** (direct transmission) — responsible for the forward-scattering glow
+- **TRT** (internal reflection + transmission) — back-scattering glint
+
+To simulate a dense pelt (not sparse single strands), a **diffuse fallback** term is blended in to approximate multiple scattering between neighboring strands, preserving the silver-gray base color and dark spot pattern without violating energy conservation.
+
+### 2. Oil-Coated Hair BCSDF (Wet Fur)
+When a seal enters water, a thin oil film coats each hair shaft. The key physics:
+- **IOR matching**: oil film (η ≈ 1.50) closely matches hair keratin (η ≈ 1.55), reducing the effective Fresnel reflectance to ~0.07% — the fur becomes optically "invisible" as a diffuse scatterer
+- **Dual-lobe GGX specular**: a sharp lobe (α = 0.005) for point-light highlights and a wide lobe (α = 0.15) for broad environment reflections capture the characteristic wet sheen
+- Importance sampling draws exclusively from the wide lobe to eliminate PDF-mismatch fireflies
+
+### 3. Curve Geometry via Embree
+Fur strands are represented as Embree `RTC_GEOMETRY_TYPE_ROUND_LINEAR_CURVE` primitives exported from Blender. The wet scene applies **geometric flattening** (compressing strand height along the skin normal) and **normal blending** (interpolating the cylinder normal toward the skin normal) to simulate clumping.
+
+### 4. UV Pipeline for Spotted Texture
+Each curve strand stores the **surface UV** of its root point on the skin mesh. The BSDFs look up the spot texture (`seal_spot.jpg`) at this UV coordinate, so dark spots appear consistently across both geometry and shading.
+
+### 5. Firefly Elimination
+The combination of micro-cylinder geometry (r ~ 0.0001) and HDR environment maps produces extreme sample variance. A nuclear sample clamp at the render accumulation level eliminates all fireflies without darkening the image.
+
+---
+
+## Repository Structure
+
+```
+lajolla_public/
+├── src/
+│   ├── materials/
+│   │   ├── hair_bcsdf.inl          # Marschner Hair BCSDF (dry fur)
+│   │   └── oil_coated_hair.inl     # Oil-Coated Hair BCSDF (wet fur)
+│   ├── shapes/
+│   │   └── curve_strands.inl       # Fur strand curve geometry + UV pipeline
+│   ├── render.cpp                  # Nuclear sample clamp
+│   ├── path_tracing.h              # MC weight / indirect radiance clamps
+│   ├── intersection.cpp/h          # Curve intersection epsilon
+│   ├── material.cpp/h              # BSDF dispatch for hair/oilcoatedhair
+│   ├── shape.cpp/h                 # Curve shape parsing + wetness params
+│   ├── scene.h                     # Scene epsilon helpers
+│   └── parsers/parse_scene.cpp     # XML parameter parsing
+└── scenes/final_project/
+    ├── seal_dry_final.xml          # Final dry seal scene
+    ├── seal_wet_final.xml          # Final wet seal scene
+    ├── Seal_Body.obj               # Seal body mesh
+    ├── Seal_Eyes.obj               # Seal eyes mesh
+    ├── ground_plane.obj            # Ground plane
+    ├── fur_base.txt                # Fur strand data — NOT included (see note below)
+    └── seal_spot.jpg               # Spot texture (skin UV map)
+
+homework/final_project/
+    ├── final_report.tex            # Full project report (LaTeX)
+    ├── checkpoint_report.tex       # Checkpoint report
+    ├── seal_dry.png                # Final dry render
+    ├── seal_wet.png                # Final wet render
+    ├── dry_to_wet.apng             # Animated dry→wet transition (APNG)
+    └── make_dry_wet_gif.py         # Script to generate the APNG
+```
+
+---
+
+## How to Run
+
+### Prerequisites
+- CMake ≥ 3.17, C++17 compiler (clang or gcc)
+- Intel Embree 3 (included in `lajolla_public/embree/`)
+
+### Build
 ```bash
 cd lajolla_public
 mkdir build && cd build
-cmake ..
-make -j
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
 ```
 
-## Usage
+### Render
+
+**Dry Seal:**
+```bash
+cd lajolla_public/scenes/final_project
+../../build/lajolla -o seal_dry.exr ./seal_dry_final.xml
+```
+
+**Wet Seal:**
+```bash
+cd lajolla_public/scenes/final_project
+../../build/lajolla -o seal_wet.exr ./seal_wet_final.xml
+```
+
+> **Note:** Pass the XML with a `./` prefix (e.g. `./seal_dry_final.xml`) so the scene parser correctly resolves relative asset paths.
+
+### Convert EXR → PNG
+```bash
+ffmpeg -i seal_dry.exr -vf "exposure=0.8,tonemap=clip,format=rgb24" \
+    ../../homework/final_project/seal_dry.png
+ffmpeg -i seal_wet.exr -vf "exposure=0.8,tonemap=clip,format=rgb24" \
+    ../../homework/final_project/seal_wet.png
+```
+
+### Generate Transition Animation
+```bash
+python3 homework/final_project/make_dry_wet_gif.py
+# Output: homework/final_project/dry_to_wet.apng
+```
+
+---
+
+## Note: Fur Strand Data Not Included
+
+`fur_base.txt` (~300 MB) exceeds GitHub's 100 MB file size limit and is therefore not tracked in this repository. It contains the raw fur strand geometry (positions, radii, and root UV coordinates for ~10 million curve segments) exported from Blender.
+
+To regenerate it, open `lajolla_public/scenes/final_project/Untitled1.blend` in Blender and run the export script:
 
 ```bash
-./lajolla <scene.xml>
+blender Untitled1.blend --background --python \
+    lajolla_public/scenes/final_project/blender_export_hair_curves.py
 ```
 
-## Project Structure
+The script writes `fur_base.txt` into the `scenes/final_project/` directory. Place it there before rendering either scene.
 
-```
-├── lajolla_public/          # Main renderer source code
-│   ├── src/
-│   │   ├── materials/       # BSDF implementations
-│   │   ├── vol_path_tracing.h  # Volumetric integrators
-│   │   └── ...
-│   └── scenes/              # Test scenes
-├── homework/                # Homework implementations
-│   ├── homework1/           # Disney BSDF
-│   └── homework2/           # Volumetric path tracing
-└── README.md
-```
+---
 
 ## References
 
-- [Physically Based Rendering: From Theory to Implementation](https://pbrt.org/)
-- [Extending the Disney BRDF to a BSDF with Integrated Subsurface Scattering](https://blog.selfshadow.com/publications/s2015-shading-course/)
-- [Importance Sampling Techniques for Path Tracing in Participating Media](https://www.solidangle.com/research/egsr2012_volume.pdf)
-- [Sampling the GGX Distribution of Visible Normals](https://jcgt.org/published/0007/04/01/)
-
-## Author
-
-Yvonne Wang - UCSD CSE 272 (Winter 2025)
-
-## License
-
-This project is for educational purposes as part of UCSD CSE 272.
+- Marschner et al., *Light Scattering from Human Hair Fibers* (SIGGRAPH 2003)
+- d'Eon et al., *An Energy-Conserving Hair Reflectance Model* (EGSR 2011)
+- Chiang et al., *A Practical and Controllable Hair and Fur Model* (EGSR 2016)
+- Pharr, Jakob, Humphreys, *Physically Based Rendering* (4th ed.)

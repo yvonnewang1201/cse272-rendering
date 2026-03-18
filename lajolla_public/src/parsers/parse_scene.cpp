@@ -7,8 +7,10 @@
 #include "shape_utils.h"
 #include "transform.h"
 #include <cctype>
+#include <fstream>
 #include <map>
 #include <regex>
+#include <sstream>
 
 const Real c_default_fov = 45.0;
 const int c_default_res = 256;
@@ -1163,6 +1165,109 @@ std::tuple<std::string /* ID */, Material> parse_bsdf(
                                               clearcoat,
                                               clearcoat_gloss,
                                               eta});
+    } else if (type == "hair") {
+        // Hair BCSDF based on Marschner model
+        Texture<Spectrum> sigma_a = make_constant_spectrum_texture(fromRGB(Vector3{0.06, 0.1, 0.2}));  // Brown hair default
+        Texture<Real> beta_m = make_constant_float_texture(Real(0.3));  // Longitudinal roughness
+        Texture<Real> beta_n = make_constant_float_texture(Real(0.3));  // Azimuthal roughness
+        Real eta = Real(1.55);      // Hair keratin IOR
+        Real alpha = Real(2.0);     // Cuticle tilt in degrees
+        Real scale_R = Real(1.0);
+        Real scale_TT = Real(1.0);
+        Real scale_TRT = Real(1.0);
+        Real sigma_a_scale = Real(1.0);  // Scale factor for absorption
+        bool use_reflectance = false;    // If true, convert reflectance texture to absorption
+        for (auto child : node.children()) {
+            std::string name = child.attribute("name").value();
+            if (name == "sigma_a" || name == "sigmaA" || name == "absorption") {
+                sigma_a = parse_spectrum_texture(
+                    child, texture_map, texture_pool, default_map);
+            } else if (name == "reflectance" || name == "color") {
+                // Use reflectance texture and convert to absorption: sigma_a = -log(reflectance) * scale
+                sigma_a = parse_spectrum_texture(
+                    child, texture_map, texture_pool, default_map);
+                use_reflectance = true;
+            } else if (name == "beta_m" || name == "betaM" || name == "longitudinal_roughness") {
+                beta_m = parse_float_texture(
+                    child, texture_map, texture_pool, default_map);
+            } else if (name == "beta_n" || name == "betaN" || name == "azimuthal_roughness") {
+                beta_n = parse_float_texture(
+                    child, texture_map, texture_pool, default_map);
+            } else if (name == "eta" || name == "ior") {
+                eta = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "alpha" || name == "cuticle_tilt") {
+                alpha = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "scale_R" || name == "scaleR") {
+                scale_R = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "scale_TT" || name == "scaleTT") {
+                scale_TT = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "scale_TRT" || name == "scaleTRT") {
+                scale_TRT = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "sigma_a_scale" || name == "absorption_scale") {
+                sigma_a_scale = parse_float(child.attribute("value").value(), default_map);
+            }
+        }
+        return std::make_tuple(id, HairBCSDF{sigma_a, beta_m, beta_n, eta, alpha, scale_R, scale_TT, scale_TRT, sigma_a_scale, use_reflectance});
+    } else if (type == "oilcoatedhair" || type == "oil_coated_hair" || type == "wethair" || type == "wet_hair") {
+        // Oil-coated hair BCSDF for wet fur rendering (layered model)
+        // Hair substrate parameters
+        Texture<Spectrum> sigma_a = make_constant_spectrum_texture(fromRGB(Vector3{0.06, 0.1, 0.2}));
+        Texture<Real> beta_m = make_constant_float_texture(Real(0.3));
+        Texture<Real> beta_n = make_constant_float_texture(Real(0.3));
+        Real hair_eta = Real(1.55);      // Hair keratin IOR
+        Real alpha = Real(2.0);          // Cuticle tilt
+        Real scale_R = Real(1.0);
+        Real scale_TT = Real(1.0);
+        Real scale_TRT = Real(1.0);
+        Real sigma_a_scale = Real(1.0);
+        bool use_reflectance = false;
+        // Oil coating parameters
+        Real oil_eta = Real(1.5);        // Oil IOR (close to hair for index matching)
+        Texture<Real> oil_roughness = make_constant_float_texture(Real(0.02));  // Smooth oil by default
+        Real oil_specular_scale = Real(1.0);  // Scale for oil specular (>1 boosts reflections)
+        Real oil_thickness = Real(0);    // Film thickness in nm (0=no interference, 300-600nm for rainbow)
+
+        for (auto child : node.children()) {
+            std::string name = child.attribute("name").value();
+            // Hair substrate parameters
+            if (name == "sigma_a" || name == "sigmaA" || name == "absorption") {
+                sigma_a = parse_spectrum_texture(child, texture_map, texture_pool, default_map);
+            } else if (name == "reflectance" || name == "color") {
+                sigma_a = parse_spectrum_texture(child, texture_map, texture_pool, default_map);
+                use_reflectance = true;
+            } else if (name == "beta_m" || name == "betaM" || name == "longitudinal_roughness") {
+                beta_m = parse_float_texture(child, texture_map, texture_pool, default_map);
+            } else if (name == "beta_n" || name == "betaN" || name == "azimuthal_roughness") {
+                beta_n = parse_float_texture(child, texture_map, texture_pool, default_map);
+            } else if (name == "hair_eta" || name == "hairEta" || name == "hair_ior") {
+                hair_eta = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "alpha" || name == "cuticle_tilt") {
+                alpha = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "scale_R" || name == "scaleR") {
+                scale_R = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "scale_TT" || name == "scaleTT") {
+                scale_TT = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "scale_TRT" || name == "scaleTRT") {
+                scale_TRT = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "sigma_a_scale" || name == "absorption_scale") {
+                sigma_a_scale = parse_float(child.attribute("value").value(), default_map);
+            }
+            // Oil coating parameters
+            else if (name == "oil_eta" || name == "oilEta" || name == "oil_ior") {
+                oil_eta = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "oil_roughness" || name == "oilRoughness") {
+                oil_roughness = parse_float_texture(child, texture_map, texture_pool, default_map);
+            } else if (name == "oil_specular_scale" || name == "oilSpecularScale" || name == "oil_scale") {
+                oil_specular_scale = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "oil_thickness" || name == "oilThickness" || name == "film_thickness") {
+                oil_thickness = parse_float(child.attribute("value").value(), default_map);
+            }
+        }
+        return std::make_tuple(id, OilCoatedHairBCSDF{
+            sigma_a, beta_m, beta_n, hair_eta, alpha,
+            scale_R, scale_TT, scale_TRT, sigma_a_scale, use_reflectance,
+            oil_eta, oil_roughness, oil_specular_scale, oil_thickness
+        });
     } else if (type == "null") {
         // TODO: implement actual null BSDF (the ray will need to pass through the shape)
         return std::make_tuple(id, Lambertian{
@@ -1381,6 +1486,258 @@ Shape parse_shape(pugi::xml_node node,
             n = xform_normal(inverse(to_world), n);
         }
         shape = mesh;
+    } else if (type == "curves" || type == "hair") {
+        // ====================================================================
+        // CURVE STRANDS FOR FUR/HAIR (v23 MINIMAL - NO GEOMETRIC TRANSFORMS)
+        // ====================================================================
+        // This is a CLEAN loader that does NOT modify geometry.
+        // - Loads curves exactly as exported from Blender
+        // - Only applies: to_world transform, radius_scale
+        // - NO flattening, NO clumping, NO deformation
+        // - Baked skin normals passed through for BSDF use
+        // ====================================================================
+
+        std::string filename;
+        Matrix4x4 to_world = Matrix4x4::identity();
+        Real radius = Real(0.01);
+        std::string curve_type_str = "linear";
+        Real radius_scale = Real(1);
+        bool shadow_invisible = false;
+        Real wetness = Real(0);  // v24: Pure vertical flattening along skin normal
+
+        for (auto child : node.children()) {
+            std::string name = child.attribute("name").value();
+            if (name == "filename") {
+                filename = parse_string(child.attribute("value").value(), default_map);
+            } else if (name == "toWorld" || name == "to_world") {
+                if (std::string(child.name()) == "transform") {
+                    to_world = parse_transform(child, default_map);
+                }
+            } else if (name == "radius") {
+                radius = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "curve_type" || name == "curveType") {
+                curve_type_str = parse_string(child.attribute("value").value(), default_map);
+            } else if (name == "radius_scale" || name == "clump_radius_scale") {
+                radius_scale = parse_float(child.attribute("value").value(), default_map);
+            } else if (name == "shadow_invisible") {
+                shadow_invisible = parse_boolean(child.attribute("value").value(), default_map);
+            } else if (name == "wetness") {
+                wetness = parse_float(child.attribute("value").value(), default_map);
+            }
+        }
+
+        // =====================================================================
+        // v30: Auto-boost radius when wet for visual hair merging
+        // =====================================================================
+        // When wetness > 0, hairs should visually "merge" into an oily surface.
+        // Thicker strands help create this continuous film appearance.
+        if (wetness > Real(0)) {
+            Real wet_radius_boost = Real(1) + wetness * Real(0.5);  // Up to 1.5x at full wetness
+            radius_scale *= wet_radius_boost;
+        }
+
+        CurveStrands curves;
+
+        if (curve_type_str == "bezier") {
+            curves.curve_type = CurveType::Bezier;
+            curves.points_per_segment = 4;
+        } else if (curve_type_str == "bspline") {
+            curves.curve_type = CurveType::BSpline;
+            curves.points_per_segment = 4;
+        } else if (curve_type_str == "catmullrom") {
+            curves.curve_type = CurveType::CatmullRom;
+            curves.points_per_segment = 4;
+        } else {
+            curves.curve_type = CurveType::Linear;
+            curves.points_per_segment = 2;
+        }
+
+        if (!filename.empty()) {
+            std::ifstream file(filename, std::ios::binary);
+            if (!file.is_open()) {
+                Error(std::string("Cannot open curves file: ") + filename);
+            }
+
+            std::string ext = filename.substr(filename.find_last_of('.') + 1);
+
+            if (ext == "hair") {
+                // Parse .hair binary format (Cem Yuksel format)
+                char magic[4];
+                file.read(magic, 4);
+                if (std::string(magic, 4) != "HAIR") {
+                    Error("Invalid .hair file magic number");
+                }
+
+                uint32_t num_strands, total_points, flags;
+                file.read(reinterpret_cast<char*>(&num_strands), 4);
+                file.read(reinterpret_cast<char*>(&total_points), 4);
+                file.read(reinterpret_cast<char*>(&flags), 4);
+                file.seekg(104);
+
+                std::vector<uint16_t> segments(num_strands, 0);
+                if (flags & 0x01) {
+                    for (uint32_t i = 0; i < num_strands; i++) {
+                        file.read(reinterpret_cast<char*>(&segments[i]), 2);
+                    }
+                }
+
+                std::vector<float> points(total_points * 3);
+                if (flags & 0x02) {
+                    file.read(reinterpret_cast<char*>(points.data()), total_points * 3 * 4);
+                }
+
+                std::vector<float> thickness(total_points, (float)radius);
+                if (flags & 0x04) {
+                    file.read(reinterpret_cast<char*>(thickness.data()), total_points * 4);
+                }
+
+                uint32_t point_idx = 0;
+                for (uint32_t strand = 0; strand < num_strands; strand++) {
+                    uint32_t num_pts = (uint32_t)segments[strand] + 1;
+                    for (uint32_t p = 0; p < num_pts; p++) {
+                        Vector3 pos{points[point_idx * 3], points[point_idx * 3 + 1], points[point_idx * 3 + 2]};
+                        pos = xform_point(to_world, pos);
+                        Real r = thickness[point_idx] * radius_scale;
+                        curves.control_points.push_back(Vector4{pos.x, pos.y, pos.z, r});
+                        if (p < num_pts - 1) {
+                            curves.indices.push_back((int)curves.control_points.size() - 1);
+                        }
+                        point_idx++;
+                    }
+                }
+            } else {
+                // ============================================================
+                // TEXT FORMAT: STRAND u v [nx ny nz] followed by x y z [radius]
+                // v24: Pure vertical flattening along baked skin normal
+                // ============================================================
+
+                std::string line;
+                std::vector<Vector4> strand_points;
+                Vector2 current_uv{0.5, 0.5};
+                Vector3 current_skin_normal{0, 1, 0};
+                bool has_skin_normal = false;
+
+                auto add_strand = [&]() {
+                    if (strand_points.size() < 2) {
+                        strand_points.clear();
+                        current_uv = Vector2{0.5, 0.5};
+                        current_skin_normal = Vector3{0, 1, 0};
+                        has_skin_normal = false;
+                        return;
+                    }
+
+                    // Transform skin normal to world space
+                    Vector3 skin_n = has_skin_normal
+                        ? normalize(xform_normal(to_world, current_skin_normal))
+                        : Vector3{0, 1, 0};
+
+                    int base_idx = (int)curves.control_points.size();
+                    int strand_id = (int)curves.root_uvs.size();
+
+                    curves.root_uvs.push_back(current_uv);
+                    curves.skin_normals.push_back(skin_n);
+
+                    // Get root position for flattening reference
+                    Vector3 root_pos{strand_points[0][0], strand_points[0][1], strand_points[0][2]};
+
+                    // ============================================================
+                    // v24: PURE VERTICAL FLATTENING
+                    // - Compress ONLY the height component along skin normal
+                    // - Keep lateral (tangent to skin) component UNCHANGED
+                    // - NO lateral spread, NO clumping, NO tangling
+                    // ============================================================
+                    for (size_t i = 0; i < strand_points.size(); i++) {
+                        Vector3 pt{strand_points[i][0], strand_points[i][1], strand_points[i][2]};
+
+                        if (wetness > Real(0) && i > 0) {
+                            // Decompose offset into height and lateral relative to skin
+                            Vector3 offset = pt - root_pos;
+                            Real height = dot(offset, skin_n);
+                            Vector3 lateral = offset - skin_n * height;
+
+                            // Compress ONLY the height (wetness=1.0 -> height=0)
+                            Real flattened_height = height * (Real(1) - wetness);
+
+                            // Reconstruct: same lateral shape, just squashed down
+                            pt = root_pos + lateral + skin_n * flattened_height;
+                        }
+
+                        Real r = strand_points[i][3] * radius_scale;
+                        curves.control_points.push_back(Vector4{pt.x, pt.y, pt.z, r});
+
+                        // Store surface normal per control point for direct lookup
+                        // This enables normal blending during intersection
+                        curves.surface_normals.push_back(skin_n);
+
+                        if (i < strand_points.size() - 1) {
+                            curves.indices.push_back(base_idx + (int)i);
+                            curves.segment_to_strand.push_back(strand_id);
+                        }
+                    }
+
+                    strand_points.clear();
+                    current_uv = Vector2{0.5, 0.5};
+                    current_skin_normal = Vector3{0, 1, 0};
+                    has_skin_normal = false;
+                };
+
+                while (std::getline(file, line)) {
+                    size_t start = line.find_first_not_of(" \t\r\n");
+                    if (start == std::string::npos || line[start] == '#') {
+                        add_strand();
+                        continue;
+                    }
+                    if (line.find("---") != std::string::npos) {
+                        add_strand();
+                        continue;
+                    }
+
+                    if (line.find("STRAND") == 0) {
+                        add_strand();
+                        std::istringstream iss(line.substr(6));
+                        Real u, v;
+                        if (iss >> u >> v) {
+                            // =========================================================
+                            // v33 FIX: Wrap UVs to [0,1] range
+                            // The fur file has out-of-range UVs like -2.03, -1.54
+                            // which cause texture lookups to return garbage (white)
+                            // =========================================================
+                            u = u - floor(u);  // Wrap to [0,1]
+                            v = v - floor(v);
+                            current_uv = Vector2{u, v};
+
+                            Real nx, ny, nz;
+                            if (iss >> nx >> ny >> nz) {
+                                Real len = sqrt(nx*nx + ny*ny + nz*nz);
+                                if (len > Real(1e-6)) {
+                                    current_skin_normal = Vector3{nx/len, ny/len, nz/len};
+                                    has_skin_normal = true;
+                                }
+                            }
+                        }
+                        continue;
+                    }
+
+                    std::istringstream iss(line);
+                    Real x, y, z, r = radius;
+                    if (iss >> x >> y >> z) {
+                        iss >> r;
+                        Vector3 pos = xform_point(to_world, Vector3{x, y, z});
+                        strand_points.push_back(Vector4{pos.x, pos.y, pos.z, r});
+                    }
+                }
+                add_strand();  // Final strand
+            }
+            file.close();
+        }
+
+        if (curves.control_points.empty()) {
+            Error("Curves shape has no control points");
+        }
+
+        curves.shadow_invisible = shadow_invisible;
+        curves.wetness = wetness;  // For normal blending (slick film effect)
+        shape = curves;
     } else {
         Error(std::string("Unknown shape:") + type);
     }
