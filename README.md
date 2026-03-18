@@ -10,11 +10,11 @@ This project implements a physically-based renderer that simulates two distinct 
 
 | Dry Seal | Wet Seal |
 |:---:|:---:|
-| ![Dry Seal](homework/final_project/seal_dry.png) | ![Wet Seal](homework/final_project/seal_wet.png) |
+| ![Dry Seal](results/seal_dry.png) | ![Wet Seal](results/seal_wet.png) |
 
 ### Dry → Wet Transition
 
-![Dry to Wet Animation](homework/final_project/dry_to_wet.apng)
+![Dry to Wet Animation](results/dry_to_wet.apng)
 
 ---
 
@@ -71,7 +71,7 @@ lajolla_public/
     ├── fur_base.txt                # Fur strand data — NOT included (see note below)
     └── seal_spot.jpg               # Spot texture (skin UV map)
 
-homework/final_project/
+results/
     ├── seal_dry.png                # Final dry render
     ├── seal_wet.png                # Final wet render
     └── dry_to_wet.apng             # Animated dry→wet transition (APNG)
