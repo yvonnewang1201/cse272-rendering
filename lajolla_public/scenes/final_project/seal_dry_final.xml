@@ -78,10 +78,14 @@
         <float name="scale_TRT" value="1.0"/>
     </bsdf>
 
-    <!-- Seal body -->
+    <!-- Seal body: plain gray skin underneath the fur.
+         Spots are on the fur strands (via surface_uv), NOT on the skin mesh. -->
+    <bsdf type="diffuse" id="skin_bsdf">
+        <rgb name="reflectance" value="0.55 0.52 0.48"/>
+    </bsdf>
     <shape type="obj">
         <string name="filename" value="Seal_Body.obj"/>
-        <ref name="bsdf" id="dry_fur_bsdf"/>
+        <ref name="bsdf" id="skin_bsdf"/>
     </shape>
 
     <!-- Seal eyes -->
